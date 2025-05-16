@@ -350,6 +350,8 @@ Myrdalの核心機能を拡張し、システム全体を強化学習フレー�
 - **Farama Foundation Agents**: エージェントフレームワーク（★★★★★）
 - **Langroid**: LLMエージェント協調フレームワーク（★★★★☆）
 - **Pydantic**: エージェント通信プロトコル（★★★★★）
+- **Autogen Core**
+- **Autogen Agentchat**
 
 ### 量子コンピューティング統合
 
