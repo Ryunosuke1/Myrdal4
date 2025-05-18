@@ -123,6 +123,32 @@ class MyrdaIChatUI:
         current_deliberation = []
         await self.myrdal.interact_with_myrdal(message=message, resume=True if self.messages else False)
         answer_id = None
+        # ストリーム用仮吹き出し
+        ai_stream_text = ""
+        ai_bubble = None
+        ai_bubble_idx = None
+        for idx, c in enumerate(self.chat_column.controls[::-1]):
+            if hasattr(c, "is_streaming") and c.is_streaming:
+                ai_bubble = c
+                ai_bubble_idx = len(self.chat_column.controls) - 1 - idx
+                break
+        if ai_bubble is None:
+            # 新規仮吹き出しを追加
+            ai_bubble = ft.Row([
+                ft.CircleAvatar(bgcolor=NordicColors.BLUE, content=ft.Icon(ft.Icons.AUTO_AWESOME, color=NordicColors.WHITE, size=18), radius=18),
+                ft.Container(
+                    content=ft.Markdown(value="", selectable=True),
+                    bgcolor=NordicColors.BLUE,
+                    padding=12,
+                    border_radius=16,
+                    margin=8,
+                    alignment=ft.alignment.center_left,
+                ),
+            ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START)
+            ai_bubble.is_streaming = True
+            self.chat_column.controls.append(ai_bubble)
+            ai_bubble_idx = len(self.chat_column.controls) - 1
+            self.page.update()
         async for event in self.myrdal.get_responses_async():
             if hasattr(event, "message") and hasattr(event.message, "content"):
                 msg = event.message
@@ -134,9 +160,16 @@ class MyrdaIChatUI:
                     self.messages.append((msg.content, False, answer_id))
                     self.deliberations[answer_id] = list(current_deliberation)
                     current_deliberation.clear()
+                    # 吹き出しを確定し熟考パネルを追加
+                    self.chat_column.controls.pop(ai_bubble_idx)
                     self.add_message_with_deliberation(msg.content, answer_id)
+                    ai_bubble = None
                 else:
-                    self.add_message(msg.content, is_user=False)
+                    # ストリーム途中のAI出力を仮吹き出しに上書き
+                    ai_stream_text += msg.content
+                    if ai_bubble is not None:
+                        ai_bubble.controls[1].content.value = ai_stream_text
+                        self.page.update()
         self.is_processing = False
         self.loading_indicator.visible = False
         self.page.update()
@@ -164,7 +197,7 @@ class MyrdaIChatUI:
             border_radius=10,
             margin=8,
             visible=False,
-            animate=ft.animation.Animation(400, "easeInOut"),
+            animate=ft.Animation(400, "easeInOut"),
             width=340,
             alignment=ft.alignment.center_left,
         )

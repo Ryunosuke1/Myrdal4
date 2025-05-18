@@ -18,6 +18,7 @@ from myrdal.knowledge.world_model_nexus import WorldModelNexus
 from myrdal.reasoning.causal_reasoner import CausalReasoner
 from myrdal.knowledge.multilayer_knowledge_graph import MultiLayerKnowledgeGraph
 from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_agentchat.conditions import TextMentionTermination
 import os
 
 
@@ -85,15 +86,16 @@ class Myrdal:
                 self.team = pickle.load(f)
             return
         llm_client = OpenAIChatCompletionClient(
-            model="qwen3-8b", 
-            api_key="sk-key", 
-            base_url="http://192.168.11.26:1234/v1", 
+            model="qwen/qwen3-235b-a22b:free", 
+            api_key="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", 
+            base_url="https://openrouter.ai/api/v1", 
             model_info={
                 "function_calling": True,
                 "family": "unknown",
                 "json_output": True,
                 "structured_output": True,
-                "vision": False
+                "vision": False,
+                "multiple_system_messages": True,
             },
         )
         # MCPサーバー設定を読み込む
@@ -128,13 +130,13 @@ class Myrdal:
                 memory=[self.memory_manager.get_short_term("verifier")],
                 memory_manager=self.memory_manager,
                 model_client=wmn,
-                system_message="You are a knowledge verifier. Organize, merge, and validate knowledge.",
+                system_message="You are a knowledge verifier. Organize, merge, and validate knowledge. Also, Check the user's request is successfully completed and reply 'The conversation is over.' in a sentence.",
                 mcp_tools=mcp_tools,
             ),
         ]
         self.team = SelectorGroupChat(
             participants=self.agents,
-            model_client=llm_client
+            model_client=llm_client,
         )
 
     def _selector_func(self, messages, agents, **kwargs):
@@ -158,6 +160,10 @@ class Myrdal:
         if not self.is_active or not self._last_task:
             return
         async for event in self.team.run_stream(task=self._last_task):
+            # inner_messagesもストリームで流す
+            if hasattr(event, "inner_messages") and event.inner_messages:
+                for inner in event.inner_messages:
+                    yield inner
             if hasattr(event, "message") and hasattr(event.message, "content"):
                 await self.memory_manager.get_agent_memory("assistant").add(event.message)
                 self.current_messages.append({"role": "assistant", "content": event.message.content})

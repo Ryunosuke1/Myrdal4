@@ -19,4 +19,16 @@ class KnowledgeIntegration:
         return {}
     async def langchain_tool(self, query: str) -> str:
         # LangChain連携のスタブ
-        return "LangChain tool result (stub)" 
+        return "LangChain tool result (stub)"
+    async def __call__(self, **kwargs):
+        method = kwargs.get("method", "langchain_tool")
+        if method == "langchain_tool":
+            query = kwargs.get("query", "")
+            return {"langchain_result": await self.langchain_tool(query)}
+        elif method == "query_wikidata":
+            sparql_query = kwargs.get("sparql_query", "")
+            return {"wikidata_result": await self.query_wikidata(sparql_query)}
+        elif method == "query_dbpedia":
+            sparql_query = kwargs.get("sparql_query", "")
+            return {"dbpedia_result": await self.query_dbpedia(sparql_query)}
+        return {"integrated_knowledge": "ここに統合結果を返す"} 

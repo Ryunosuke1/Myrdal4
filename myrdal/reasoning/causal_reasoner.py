@@ -69,4 +69,19 @@ class CausalReasoner:
             await self.fit_bayesian_network()
         infer = VariableElimination(self.model)
         q = infer.query(**query)
-        return q 
+        return q
+
+    async def __call__(self, **kwargs):
+        method = kwargs.get("method", "infer")
+        if method == "infer":
+            query = kwargs.get("query", {})
+            return {"causal_inference": await self.infer(query)}
+        elif method == "estimate_effect":
+            treatment = kwargs.get("treatment")
+            outcome = kwargs.get("outcome")
+            intervention_value = kwargs.get("intervention_value", 1)
+            return {"effect": await self.estimate_effect(treatment, outcome, intervention_value)}
+        elif method == "simulate_intervention":
+            intervention = kwargs.get("intervention", {})
+            return {"simulation": await self.simulate_intervention(intervention)}
+        return {"causal_inference": "因果推論結果"} 

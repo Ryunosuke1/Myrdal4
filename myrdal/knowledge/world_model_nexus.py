@@ -55,6 +55,8 @@ class WorldModelNexus(ChatCompletionClient):
             content=result.get("final_answer", ""),
             thought=result.get("thought", ""),
             usage=RequestUsage(prompt_tokens=0, completion_tokens=0),
+            finish_reason="stop",
+            cached=False
         )
 
     async def create_stream(
@@ -87,6 +89,8 @@ class WorldModelNexus(ChatCompletionClient):
                 content=final_result.get("final_answer", ""),
                 thought=final_result.get("thought", ""),
                 usage=RequestUsage(prompt_tokens=0, completion_tokens=0),
+                finish_reason="stop",
+                cached=False
             )
 
     async def close(self):
@@ -214,10 +218,21 @@ class WorldModelNexus(ChatCompletionClient):
                 parsed = result.content if isinstance(result.content, dict) else json.loads(result.content)
             except Exception:
                 parsed = {"thought": result.content, "call_module": None, "call_args": {}, "satisfied": False, "final_answer": None}
-            if parsed["call_module"] and parsed["call_module"] in self.knowledge_modules:
-                module = self.knowledge_modules[parsed["call_module"]]
-                module_result = await module(**parsed["call_args"])
-                parsed["module_result"] = module_result
+            if parsed["call_module"]:
+                if isinstance(parsed["call_module"], list):
+                    parsed["module_result"] = []
+                    for module_call in parsed["call_module"]:
+                        module_name = module_call.get("module")
+                        call_args = module_call.get("args", {})
+                        if module_name in self.knowledge_modules:
+                            module = self.knowledge_modules[module_name]
+                            module_result = await module(**call_args)
+                            parsed["module_result"].append({module_name: module_result})
+                elif isinstance(parsed["call_module"], str):
+                    if parsed["call_module"] in self.knowledge_modules:
+                        module = self.knowledge_modules[parsed["call_module"]]
+                        module_result = await module(**parsed.get("call_args", {}))
+                        parsed["module_result"] = module_result
             if parsed["satisfied"]:
                 return parsed
             step += 1
@@ -268,10 +283,21 @@ class WorldModelNexus(ChatCompletionClient):
                 except Exception:
                     parsed = {"thought": chunk, "call_module": None, "call_args": {}, "satisfied": False, "final_answer": None}
                 yield parsed
-                if parsed["call_module"] and parsed["call_module"] in self.knowledge_modules:
-                    module = self.knowledge_modules[parsed["call_module"]]
-                    module_result = await module(**parsed["call_args"])
-                    parsed["module_result"] = module_result
+                if parsed["call_module"]:
+                    if isinstance(parsed["call_module"], list):
+                        parsed["module_result"] = []
+                        for module_call in parsed["call_module"]:
+                            module_name = module_call.get("module")
+                            call_args = module_call.get("args", {})
+                            if module_name in self.knowledge_modules:
+                                module = self.knowledge_modules[module_name]
+                                module_result = await module(**call_args)
+                                parsed["module_result"].append({module_name: module_result})
+                    elif isinstance(parsed["call_module"], str):
+                        if parsed["call_module"] in self.knowledge_modules:
+                            module = self.knowledge_modules[parsed["call_module"]]
+                            module_result = await module(**parsed.get("call_args", {}))
+                            parsed["module_result"] = module_result
                 if parsed["satisfied"]:
                     break
             step += 1 
