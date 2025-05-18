@@ -1,4 +1,4 @@
-from autogen_agentchat.memory import ListMemory
+from autogen_core.memory import ListMemory
  
 class ShortTermMemory(ListMemory):
     """
