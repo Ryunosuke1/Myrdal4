@@ -1,4 +1,5 @@
 # 統合メタ認知フレームワーク
+# これは今使われていない
 
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from autogen_core.models import ChatCompletionClient
@@ -6,8 +7,8 @@ import json
 import os
 
 class MetacognitionFramework:
-    def __init__(self, knowledge_modules: dict, chat_client: ChatCompletionClient, llm_model="gpt-3.5-turbo"):
-        self.knowledge_modules = knowledge_modules
+    def __init__(self, knowledge_modules: dict, chat_client: ChatCompletionClient, llm_model="gpt-3.5-turbo", causal_reasoner=None):
+        self.knowledge_modules = knowledge_modules.copy() if knowledge_modules else {}
         self.llm_model = llm_model
         self.client = chat_client  # 必須引数として受け取る
 
@@ -19,7 +20,7 @@ class MetacognitionFramework:
             prompt = (
                 "You are a metacognitive AI. For each step, output a JSON with: "
                 "'thought', 'call_module', 'call_args', 'satisfied', 'final_answer'. "
-                "Use only the following modules: abstract_thinking, multilingual, explainable_ai, social_cognition, knowledge_integration. "
+                "Use only the following modules: abstract_thinking, multilingual, explainable_ai, social_cognition, knowledge_integration, causal_reasoner. "
                 "If you need to call a module, set 'call_module' and 'call_args'. If you are satisfied, set 'satisfied': true and provide 'final_answer'.\n"
                 f"Goal: {goal}\nMessages: {messages}\nModuleResults: {module_results}"
             )
@@ -50,7 +51,7 @@ class MetacognitionFramework:
             prompt = (
                 "You are a metacognitive AI. For each step, output a JSON with: "
                 "'thought', 'call_module', 'call_args', 'satisfied', 'final_answer'. "
-                "Use only the following modules: abstract_thinking, multilingual, explainable_ai, social_cognition, knowledge_integration. "
+                "Use only the following modules: abstract_thinking, multilingual, explainable_ai, social_cognition, knowledge_integration, causal_reasoner. "
                 "If you need to call a module, set 'call_module' and 'call_args'. If you are satisfied, set 'satisfied': true and provide 'final_answer'.\n"
                 f"Goal: {goal}\nMessages: {messages}\nModuleResults: {module_results}"
             )
