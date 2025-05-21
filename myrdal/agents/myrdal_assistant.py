@@ -16,14 +16,14 @@ import json
 from pydantic import BaseModel
 
 class MyrdalAssistantAgent(AssistantAgent):
-    def __init__(self, *, agent_id: str, memory, memory_manager: MemoryManager, model_client: ChatCompletionClient, model=None, feature_names=None, tools=None, mcp_tools=None, system_message=None, **kwargs):
+    def __init__(self, *, agent_id: str, memory, memory_manager: MemoryManager, model_client: ChatCompletionClient, model=None, feature_names=None, tools=None, mcp_tools=None, system_message=None, stream=True,**kwargs):
         # tools: 通常のツールリスト, mcp_tools: MCP経由のツールリスト
         all_tools = []
         if tools:
             all_tools.extend(tools)
         if mcp_tools:
             all_tools.extend(mcp_tools)
-        super().__init__(name=agent_id, memory=memory, tools=all_tools, system_message=system_message, model_client=model_client)
+        super().__init__(name=agent_id, memory=memory, tools=all_tools, system_message=system_message, model_client=model_client, model_client_stream=stream)
         self.memory_manager = memory_manager
         # 知識モジュールの初期化
         # self.knowledge_modules = {

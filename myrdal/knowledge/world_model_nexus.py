@@ -75,6 +75,13 @@ class WorldModelNexus(ChatCompletionClient):
         step = 1
         final_result = None
         async for result in self._deliberation_stream(messages, extra_create_args):
+            # resultが整数値の場合の対策
+            if isinstance(result, int):
+                print(f"Warning: result is an integer: {result}")
+                continue
+            if result is None:
+                continue
+                
             thought = result.get("thought", "")
             yield ThoughtEvent(
                 content=f"Step {step}: {thought}",
@@ -116,6 +123,7 @@ class WorldModelNexus(ChatCompletionClient):
     async def _deliberation_stream(self, messages, extra_create_args):
         context = {"messages": messages, "goal": extra_create_args.get("goal") if extra_create_args else None}
         async for step in self.deliberate_stream(context):
+            print("step:", step)
             yield step
 
     # --- Verifier向け知識管理API ---
@@ -183,6 +191,7 @@ class WorldModelNexus(ChatCompletionClient):
         goal = context.get("goal", "")
         step = 1
         deliberation_messages = list(messages)
+        MAX_RETRY = 3
         while True:
             prompt = (
                 f"You are a metacognitive world model AI.\n"
@@ -197,7 +206,6 @@ class WorldModelNexus(ChatCompletionClient):
                 f"Output in JSON: {{'thought': ..., 'call_module': ..., 'call_args': ..., 'satisfied': ..., 'final_answer': ...}}"
             )
             deliberation_messages.append({"role": "system", "content": prompt})
-            # dict→LLMMessage型に変換
             deliberation_messages_llm = [self._to_llm_message(m) for m in deliberation_messages]
             response_schema = {
                 "type": "object",
@@ -210,14 +218,30 @@ class WorldModelNexus(ChatCompletionClient):
                 },
                 "required": ["thought", "satisfied"]
             }
-            result = await self.client.create(
-                deliberation_messages_llm,
-                extra_create_args={"response_format": {"type": "json_schema", "schema": response_schema}}
-            )
-            try:
-                parsed = result.content if isinstance(result.content, dict) else json.loads(result.content)
-            except Exception:
-                parsed = {"thought": result.content, "call_module": None, "call_args": {}, "satisfied": False, "final_answer": None}
+            retry_count = 0
+            while retry_count < MAX_RETRY:
+                result = await self.client.create(
+                    deliberation_messages_llm,
+                    extra_create_args={"response_format": {"type": "json_schema", "schema": response_schema}}
+                )
+                try:
+                    parsed = result.content if isinstance(result.content, dict) else json.loads(result.content)
+                except Exception:
+                    parsed = {"thought": result.content, "call_module": None, "call_args": {}, "satisfied": False, "final_answer": None}
+                call_args = parsed.get("call_args", {})
+                if not isinstance(call_args, dict):
+                    # system messageで"call_argsは必ずobject型で返すこと"を追加
+                    deliberation_messages.append({
+                        "role": "system",
+                        "content": "call_args must always be an object (dictionary). Please output call_args as a JSON object, not a string or array."
+                    })
+                    deliberation_messages_llm = [self._to_llm_message(m) for m in deliberation_messages]
+                    retry_count += 1
+                    continue
+                break
+            else:
+                # 3回リトライしてもダメならエラー返す
+                return {"error": "call_args was not a dictionary after 3 retries."}
             if parsed["call_module"]:
                 if isinstance(parsed["call_module"], list):
                     parsed["module_result"] = []
@@ -253,7 +277,6 @@ class WorldModelNexus(ChatCompletionClient):
                 f"You can use the following knowledge modules:\n"
                 f"- abstract_thinking: for abstraction, analogy, and high-level reasoning.\n"
                 f"- multilingual: for multilingual understanding and translation.\n"
-                f"- explainable_ai: for explainable AI and model interpretation.\n"
                 f"- social_cognition: for social reasoning and theory of mind.\n"
                 f"- knowledge_integration: for integrating and synthesizing knowledge.\n"
                 f"- causal_reasoner: for causal inference and reasoning.\n"
@@ -282,8 +305,14 @@ class WorldModelNexus(ChatCompletionClient):
                     parsed = chunk if isinstance(chunk, dict) else json.loads(chunk)
                 except Exception:
                     parsed = {"thought": chunk, "call_module": None, "call_args": {}, "satisfied": False, "final_answer": None}
+                    
+                # 整数値のチャンクは無視する
+                if isinstance(parsed, int):
+                    print(f"Warning: parsed is an integer: {parsed}")
+                    continue
+                    
                 yield parsed
-                if parsed["call_module"]:
+                if parsed is not None and parsed.get("call_module"):
                     if isinstance(parsed["call_module"], list):
                         parsed["module_result"] = []
                         for module_call in parsed["call_module"]:
@@ -298,6 +327,8 @@ class WorldModelNexus(ChatCompletionClient):
                             module = self.knowledge_modules[parsed["call_module"]]
                             module_result = await module(**parsed.get("call_args", {}))
                             parsed["module_result"] = module_result
-                if parsed["satisfied"]:
+                if parsed is not None and parsed["satisfied"]:
                     break
-            step += 1 
+            step += 1
+            # ここで誤って step が yield されないように注意
+            # このブロックでは何もyieldしない 

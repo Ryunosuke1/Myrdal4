@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Myrdal API ドキュメント</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #5E81AC;
+            border-bottom: 2px solid #D8DEE9;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #81A1C1;
+            margin-top: 30px;
+        }
+        code {
+            background-color: #ECEFF4;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+        }
+        pre {
+            background-color: #E5E9F0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .endpoint {
+            background-color: #ECEFF4;
+            border-left: 4px solid #5E81AC;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 5px 5px 0;
+        }
+        .method {
+            display: inline-block;
+            padding: 3px 8px;
+            color: white;
+            border-radius: 3px;
+            font-weight: bold;
+            font-size: 0.8em;
+            margin-right: 10px;
+        }
+        .get {
+            background-color: #8FBCBB;
+        }
+        .post {
+            background-color: #A3BE8C;
+        }
+        .websocket {
+            background-color: #B48EAD;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 8px 15px;
+            text-align: left;
+            border-bottom: 1px solid #D8DEE9;
+        }
+        th {
+            background-color: #E5E9F0;
+        }
+        .footer {
+            margin-top: 50px;
+            border-top: 1px solid #D8DEE9;
+            padding-top: 20px;
+            color: #4C566A;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Myrdal API ドキュメント</h1>
+    
+    <p>Myrdal AIのチャット機能にアクセスするためのRESTful APIおよびWebSocketインターフェイス。</p>
+    
+    <h2>基本情報</h2>
+    <p>
+        <strong>ベースURL:</strong> <code>http://localhost:8000</code><br>
+        <strong>コンテンツタイプ:</strong> <code>application/json</code>
+    </p>
+    
+    <h2>エンドポイント</h2>
+    
+    <div class="endpoint">
+        <span class="method get">GET</span> <code>/</code>
+        <p>WebUIのホームページを返します。</p>
+        <p><strong>レスポンス:</strong> HTML</p>
+    </div>
+    
+    <div class="endpoint">
+        <span class="method post">POST</span> <code>/api/chat</code>
+        <p>メッセージを送信してMyrdal AIからの応答を取得します。</p>
+        
+        <h3>リクエスト本文:</h3>
+        <pre>{
+  "message": "こんにちは、Myrdal AIについて教えてください。",
+  "resume": false
+}</pre>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>パラメータ</th>
+                    <th>型</th>
+                    <th>必須</th>
+                    <th>説明</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>message</td>
+                    <td>string</td>
+                    <td>はい</td>
+                    <td>ユーザーからのメッセージテキスト</td>
+                </tr>
+                <tr>
+                    <td>resume</td>
+                    <td>boolean</td>
+                    <td>いいえ</td>
+                    <td>前の会話を継続するかどうか（デフォルト: false）</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h3>レスポンス:</h3>
+        <pre>{
+  "message": "こんにちは！Myrdalは高度な認知機能を持つAIシステムです...",
+  "is_user": false,
+  "deliberations": ["ユーザーの質問を分析", "Myrdalの主要機能を整理", "..."],
+  "timestamp": 1621234567.89,
+  "id": "1621234567_1234"
+}</pre>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>パラメータ</th>
+                    <th>型</th>
+                    <th>説明</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>message</td>
+                    <td>string</td>
+                    <td>Myrdal AIからの応答メッセージ</td>
+                </tr>
+                <tr>
+                    <td>is_user</td>
+                    <td>boolean</td>
+                    <td>メッセージがユーザーからのものか（常に false）</td>
+                </tr>
+                <tr>
+                    <td>deliberations</td>
+                    <td>array</td>
+                    <td>AIの思考過程を表す文字列の配列</td>
+                </tr>
+                <tr>
+                    <td>timestamp</td>
+                    <td>float</td>
+                    <td>メッセージのタイムスタンプ（Unix時間）</td>
+                </tr>
+                <tr>
+                    <td>id</td>
+                    <td>string</td>
+                    <td>メッセージの一意識別子</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="endpoint">
+        <span class="method websocket">WebSocket</span> <code>/ws/chat</code>
+        <p>WebSocketを通じてリアルタイムでメッセージを送受信します。</p>
+        
+        <h3>送信メッセージ形式:</h3>
+        <pre>{
+  "message": "こんにちは、Myrdal AIについて教えてください。",
+  "resume": false
+}</pre>
+        
+        <h3>受信メッセージ形式:</h3>
+        <pre>{
+  "message": "こんにちは！Myrdalは...",
+  "is_user": false,
+  "is_streaming": true,
+  "deliberations": ["ユーザーの質問を分析", "..."],
+  "timestamp": 1621234567.89,
+  "id": "1621234567_1234"
+}</pre>
+        
+        <p>ストリーミング中は複数のメッセージが送信され、<code>is_streaming</code>フラグで状態が示されます。最終メッセージでは<code>is_streaming: false</code>となります。</p>
+    </div>
+    
+    <div class="endpoint">
+        <span class="method get">GET</span> <code>/api/health</code>
+        <p>APIサーバーの稼働状態を確認します。</p>
+        <p><strong>レスポンス:</strong></p>
+        <pre>{
+  "status": "ok",
+  "initialized": true
+}</pre>
+    </div>
+    
+    <h2>サーバー起動方法</h2>
+    <p>次のコマンドでAPIサーバーを起動できます：</p>
+    <pre>cd /Users/sagararyuunosuke/Myrdal4/webui
+python run.py</pre>
+    
+    <div class="footer">
+        <p>© 2025 Myrdal AI - API Documentation</p>
+    </div>
+</body>
+</html>

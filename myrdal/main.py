@@ -19,6 +19,7 @@ from myrdal.reasoning.causal_reasoner import CausalReasoner
 from myrdal.knowledge.multilayer_knowledge_graph import MultiLayerKnowledgeGraph
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from autogen_agentchat.conditions import TextMentionTermination
+from autogen_agentchat.messages import ThoughtEvent
 import os
 
 
@@ -86,8 +87,8 @@ class Myrdal:
                 self.team = pickle.load(f)
             return
         llm_client = OpenAIChatCompletionClient(
-            model="qwen/qwen3-235b-a22b:free", 
-            api_key="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", 
+            model="tngtech/deepseek-r1t-chimera:free", 
+            api_key="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", 
             base_url="https://openrouter.ai/api/v1", 
             model_info={
                 "function_calling": True,
@@ -124,6 +125,7 @@ class Myrdal:
                 memory_manager=self.memory_manager,
                 model_client=wmn,
                 mcp_tools=mcp_tools,
+                stream=True,
             ),
             MyrdalAssistantAgent(
                 agent_id="verifier",
@@ -132,6 +134,7 @@ class Myrdal:
                 model_client=wmn,
                 system_message="You are a knowledge verifier. Organize, merge, and validate knowledge. Also, Check the user's request is successfully completed and reply 'The conversation is over.' in a sentence.",
                 mcp_tools=mcp_tools,
+                stream=True
             ),
         ]
         self.team = SelectorGroupChat(
@@ -144,6 +147,10 @@ class Myrdal:
         return 0
 
     async def interact_with_myrdal(self, message: str, resume: bool = False) -> None:
+        """
+        従来のインタラクションメソッド（下位互換性のために維持）
+        新しい実装ではinteract_and_get_responsesを使用してください
+        """
         if not self.is_active or not resume:
             self.is_active = True
             self.current_messages = []
@@ -157,16 +164,62 @@ class Myrdal:
             pickle.dump(self.team, f)
 
     async def get_responses_async(self) -> AsyncGenerator[BaseAgentEvent | BaseChatMessage | TaskResult, None]:
+        """
+        従来のレスポンス取得メソッド（下位互換性のために維持）
+        新しい実装ではinteract_and_get_responsesを使用してください
+        """
         if not self.is_active or not self._last_task:
             return
         async for event in self.team.run_stream(task=self._last_task):
             # inner_messagesもストリームで流す
-            if hasattr(event, "inner_messages") and event.inner_messages:
-                for inner in event.inner_messages:
+            if hasattr(event, "messages") and event.messages:
+                for inner in event.model_dump():
                     yield inner
             if hasattr(event, "message") and hasattr(event.message, "content"):
                 await self.memory_manager.get_agent_memory("assistant").add(event.message)
                 self.current_messages.append({"role": "assistant", "content": event.message.content})
+            print("----------------------------------------------------------------")
+            print(event)
+            print("----------------------------------------------------------------")
+            yield event
+            
+    async def interact_and_get_responses(self, message: str, resume: bool = False) -> AsyncGenerator[BaseAgentEvent | BaseChatMessage | TaskResult, None]:
+        """
+        interact_with_myrdalとget_responses_asyncを統合した新しいメソッド
+        メッセージを送信し、そのレスポンスをストリームとして直接返します
+        
+        Args:
+            message (str): ユーザーからのメッセージ
+            resume (bool, optional): 会話を再開するかどうか. デフォルトはFalse
+            
+        Yields:
+            AsyncGenerator[BaseAgentEvent | BaseChatMessage | TaskResult, None]: レスポンスイベントのストリーム
+        """
+        # 状態の設定（interact_with_myrdalと同様）
+        if not self.is_active or not resume:
+            self.is_active = True
+            self.current_messages = []
+        self.current_messages.append({"role": "user", "content": message})
+        self._last_task = message
+        
+        # レスポンスの取得と生成（get_responses_asyncと同様）
+        if not self.is_active or not self._last_task:
+            return
+        async for event in self.team.run_stream(task=self._last_task):
+            # イベントの詳細構造を出力（デバッグ用）
+            print("===== イベントタイプ =====")
+            print(type(event))
+            print("===== イベント内容 =====")
+            if hasattr(event, "model_dump"):
+                print(event.model_dump_json())
+            else:
+                print(event)
+            print("===== 属性チェック =====")
+            print(f"has 'inner_messages': {hasattr(event, 'inner_messages')}")
+            print(f"has 'message': {hasattr(event, 'message')}")
+            print(f"has 'messages': {hasattr(event, 'messages')}")
+            
+            # すべてのイベントをそのまま転送
             yield event
 
     def resume(self):
