@@ -161,6 +161,46 @@ body {
     display: none;
 }
 
+/* 思考過程の表示スタイル */
+.thought-container {
+    background-color: rgba(232, 236, 244, 0.8);
+    color: var(--darker-gray);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-top: 0.8rem;
+    margin-bottom: 1rem;
+    font-size: 0.92rem;
+    line-height: 1.4;
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.5s ease-in-out, padding 0.3s ease-in-out;
+}
+
+.thought-container.active {
+    max-height: 500px;
+    padding: 1rem;
+}
+
+.thought-header {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--dark-gray);
+}
+
+.thought-divider {
+    height: 1px;
+    background-color: var(--gray);
+    margin: 0.8rem 0;
+    opacity: 0.6;
+}
+
+.thought-content {
+    white-space: pre-line;
+    padding-left: 0.5rem;
+    border-left: 3px solid var(--gray);
+    margin-bottom: 0.5rem;
+}
+
 .deliberation-panel.active {
     display: block;
     animation: slideDown 0.3s ease-out;

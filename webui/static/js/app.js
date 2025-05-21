@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // ストリーミングメッセージの処理
     function handleIncomingMessage(data) {
-        const { message, is_user, is_streaming, deliberations, timestamp, id } = data;
+        const { message, is_user, is_streaming, deliberations, thoughts, timestamp, id } = data;
         const messageId = id || `msg-${Date.now()}`;
         
         // 既存のメッセージ要素を探す
@@ -49,8 +49,12 @@ document.addEventListener('DOMContentLoaded', () => {
             chatMessages.appendChild(messageElement);
             scrollToBottom();
             
-            // メッセージに熟考過程パネルがある場合は追加
-            if (deliberations && deliberations.length > 0 && !is_user) {
+            // メッセージに思考過程パネルがある場合は追加（ストリーミング中に表示）
+            if (thoughts && thoughts.length > 0 && !is_user && is_streaming) {
+                addThoughtPanel(messageElement, thoughts, message, messageId, true);
+            }
+            // 互換性のためdeliberationsも処理
+            else if (deliberations && deliberations.length > 0 && !is_user) {
                 addDeliberationPanel(messageElement, deliberations, messageId);
             }
         } else {
@@ -58,8 +62,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const contentElement = messageElement.querySelector('.message-content');
             contentElement.innerHTML = marked.parse(message);
             
-            // 熟考過程の更新
-            if (deliberations && deliberations.length > 0 && !is_user) {
+            // 思考過程の更新
+            if (thoughts && thoughts.length > 0 && !is_user) {
+                updateThoughtPanel(messageId, thoughts, message);
+            }
+            // 互換性のためdeliberationsも処理
+            else if (deliberations && deliberations.length > 0 && !is_user) {
                 updateDeliberationPanel(messageId, deliberations);
             }
         }
@@ -69,6 +77,11 @@ document.addEventListener('DOMContentLoaded', () => {
             isProcessing = false;
             loadingIndicator.style.display = 'none';
             messageElement.classList.remove('streaming');
+            
+            // 最終レスポンスでは、既存の思考過程パネルがあれば更新
+            if (thoughts && thoughts.length > 0 && !is_user) {
+                addThoughtPanel(messageElement, thoughts, message, messageId, false);
+            }
         }
     }
     
@@ -175,6 +188,109 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // 思考過程パネルの追加
+    function addThoughtPanel(messageElement, thoughts, finalMessage, messageId, isStreaming = false) {
+        // 既存のパネルがあれば削除
+        const existingPanel = messageElement.querySelector('.thought-container');
+        if (existingPanel) {
+            existingPanel.remove();
+        }
+        
+        // メッセージコンテナを取得
+        const contentContainer = messageElement.querySelector('.message-content');
+        
+        // 思考過程コンテナ
+        const thoughtContainer = document.createElement('div');
+        thoughtContainer.className = `thought-container ${isStreaming ? 'active' : ''}`;
+        thoughtContainer.setAttribute('data-message-id', messageId);
+        
+        // 思考過程ヘッダー
+        const thoughtHeader = document.createElement('div');
+        thoughtHeader.className = 'thought-header';
+        thoughtHeader.textContent = 'Thought:';
+        thoughtContainer.appendChild(thoughtHeader);
+        
+        // 思考過程コンテンツ
+        const thoughtContent = document.createElement('div');
+        thoughtContent.className = 'thought-content';
+        
+        // 思考内容を結合
+        thoughtContent.textContent = thoughts.join('\n');
+        thoughtContainer.appendChild(thoughtContent);
+        
+        // 区切り線
+        const divider = document.createElement('div');
+        divider.className = 'thought-divider';
+        thoughtContainer.appendChild(divider);
+        
+        // 最終メッセージ（既にcontentContainerに含まれているのでここでは追加しない）
+        
+        // 思考過程コンテナを追加
+        contentContainer.appendChild(thoughtContainer);
+        
+        // ストリーミングが終了したらトグルボタンを追加
+        if (!isStreaming) {
+            // 既存のボタンがあれば削除
+            const existingButtonContainer = messageElement.parentNode.querySelector('.thought-button-container');
+            if (existingButtonContainer) {
+                existingButtonContainer.remove();
+            }
+            
+            // ボタンコンテナ
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'thought-button-container';
+            buttonContainer.style.marginLeft = '60px';
+            buttonContainer.style.marginTop = '8px';
+            
+            // トグルボタン
+            const toggleButton = document.createElement('button');
+            toggleButton.className = 'deliberation-toggle';
+            toggleButton.textContent = '🧠 思考過程を見る';
+            toggleButton.onclick = function() {
+                const container = messageElement.querySelector('.thought-container');
+                if (container) {
+                    container.classList.toggle('active');
+                    this.textContent = container.classList.contains('active') ? '🧠 思考過程を隠す' : '🧠 思考過程を見る';
+                }
+            };
+            
+            // ボタンを追加
+            buttonContainer.appendChild(toggleButton);
+            
+            // メッセージの後にボタンを挿入
+            if (messageElement.nextSibling) {
+                messageElement.parentNode.insertBefore(buttonContainer, messageElement.nextSibling);
+            } else {
+                messageElement.parentNode.appendChild(buttonContainer);
+            }
+            
+            // 初期状態では非表示
+            thoughtContainer.classList.remove('active');
+        }
+    }
+    
+    // 思考過程パネルの更新
+    function updateThoughtPanel(messageId, thoughts, finalMessage) {
+        // メッセージ要素を取得
+        const messageElement = document.getElementById(messageId);
+        if (!messageElement) return;
+        
+        // 思考過程コンテナを取得
+        let thoughtContainer = messageElement.querySelector('.thought-container');
+        
+        // 思考過程コンテナがない場合は新規作成
+        if (!thoughtContainer) {
+            addThoughtPanel(messageElement, thoughts, finalMessage, messageId, true);
+            return;
+        }
+        
+        // 思考過程コンテンツを更新
+        const thoughtContent = thoughtContainer.querySelector('.thought-content');
+        if (thoughtContent) {
+            thoughtContent.textContent = thoughts.join('\n');
+        }
+    }
+    
     // 下にスクロール
     function scrollToBottom() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -216,7 +332,8 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(data => {
                 handleIncomingMessage({
                     ...data,
-                    is_streaming: false
+                    is_streaming: false,
+                    thoughts: data.thoughts || [] // thoughtsを明示的に取り出す
                 });
             })
             .catch(error => {
