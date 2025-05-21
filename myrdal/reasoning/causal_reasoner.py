@@ -73,6 +73,16 @@ class CausalReasoner:
 
     async def __call__(self, **kwargs):
         method = kwargs.get("method", "infer")
+        # グラフ未セット時はLLMにdiscover_structureを促す返答を返す
+        if self.graph is None and method != "discover_structure":
+            # ここでデータの例や説明を返すことも可能
+            return {
+                "thought": "Causal graph is not set. Please call 'discover_structure' with appropriate data before running inference.",
+                "call_module": "causal_reasoner",
+                "call_args": {"method": "discover_structure", "data": "<your_dataframe_here>"},
+                "satisfied": False,
+                "final_answer": None
+            }
         if method == "infer":
             query = kwargs.get("query", {})
             return {"causal_inference": await self.infer(query)}
@@ -84,4 +94,9 @@ class CausalReasoner:
         elif method == "simulate_intervention":
             intervention = kwargs.get("intervention", {})
             return {"simulation": await self.simulate_intervention(intervention)}
+        elif method == "discover_structure":
+            data = kwargs.get("data")
+            if data is None:
+                return {"error": "No data provided for structure discovery."}
+            return {"graph": await self.discover_structure(data)}
         return {"causal_inference": "因果推論結果"} 

@@ -1,10 +1,19 @@
 import flet as ft
 import asyncio
 import time
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast
 import random
 import sys
 import os
+from autogen_agentchat.base import Response, TaskResult
+from autogen_agentchat.messages import (
+    BaseAgentEvent,
+    BaseChatMessage,
+    ModelClientStreamingChunkEvent,
+    MultiModalMessage,
+    UserInputRequestedEvent,
+    TextMessage
+)
 
 # パスを追加して myrdal モジュールを見つけられるようにする
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -51,6 +60,7 @@ class MyrdaIChatUI:
         self.page.title = "Myrdal Chat"
         self.page.bgcolor = NordicColors.DARKEST_GRAY
         self.page.theme_mode = ft.ThemeMode.DARK
+        self.page.on_resize = self.on_page_resize
         self.chat_column = ft.ListView(expand=True, spacing=8, auto_scroll=True, padding=16)
         self.input_field = ft.TextField(
             hint_text="メッセージを入力...",
@@ -80,7 +90,7 @@ class MyrdaIChatUI:
             ft.ProgressRing(width=18, height=18, stroke_width=2, color=NordicColors.BLUE),
             ft.Text("Myrdalが思考中...", color=NordicColors.LIGHT_GRAY, size=14)
         ], alignment=ft.MainAxisAlignment.START, visible=False)
-        self.page.add(
+        self.page.add(ft.SafeArea(
             ft.Container(
                 content=ft.Column([
                     ft.Container(
@@ -95,7 +105,7 @@ class MyrdaIChatUI:
                 expand=True,
                 bgcolor=NordicColors.DARKEST_GRAY,
                 padding=ft.padding.all(0),
-            )
+            ))
         )
         self.page.update()
         self.page.run_task(self.start)
@@ -121,7 +131,7 @@ class MyrdaIChatUI:
         self.loading_indicator.visible = True
         self.page.update()
         current_deliberation = []
-        await self.myrdal.interact_with_myrdal(message=message, resume=True if self.messages else False)
+        resume_flag = True if self.messages else False
         answer_id = None
         # ストリーム用仮吹き出し
         ai_stream_text = ""
@@ -134,57 +144,85 @@ class MyrdaIChatUI:
                 break
         if ai_bubble is None:
             # 新規仮吹き出しを追加
+            max_width = min(self.page.width * 0.75 - 100, 700)  # 画面幅の75%まで（ただし最大700px）
             ai_bubble = ft.Row([
                 ft.CircleAvatar(bgcolor=NordicColors.BLUE, content=ft.Icon(ft.Icons.AUTO_AWESOME, color=NordicColors.WHITE, size=18), radius=18),
                 ft.Container(
-                    content=ft.Markdown(value="", selectable=True),
+                    content=ft.Markdown(
+                        value="", 
+                        selectable=True,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                        auto_follow_links=False
+                    ),
                     bgcolor=NordicColors.BLUE,
                     padding=12,
                     border_radius=16,
                     margin=8,
                     alignment=ft.alignment.center_left,
+                    width=max_width,
+                    expand=True,
                 ),
             ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START)
             ai_bubble.is_streaming = True
             self.chat_column.controls.append(ai_bubble)
             ai_bubble_idx = len(self.chat_column.controls) - 1
             self.page.update()
-        async for event in self.myrdal.get_responses_async():
-            if hasattr(event, "message") and hasattr(event.message, "content"):
-                msg = event.message
-                if getattr(msg, "role", None) == "considering":
-                    current_deliberation.append(msg.content)
-                elif getattr(msg, "role", None) == "assistant" and "satisfied" in msg.content:
-                    answer_id = self.answer_count
-                    self.answer_count += 1
-                    self.messages.append((msg.content, False, answer_id))
-                    self.deliberations[answer_id] = list(current_deliberation)
-                    current_deliberation.clear()
-                    # 吹き出しを確定し熟考パネルを追加
-                    self.chat_column.controls.pop(ai_bubble_idx)
-                    self.add_message_with_deliberation(msg.content, answer_id)
-                    ai_bubble = None
+        async for event in self.myrdal.interact_and_get_responses(message, resume=resume_flag):
+            print("UI側message")
+            print("---------------------")
+            print(event)
+            print("---------------------")
+            # 直接TextMessageなどのメッセージオブジェクトの属性にアクセス
+            if isinstance(event, TaskResult):
+                msg_content = event.messages
+                self.add_message(msg_content, False)
+            elif isinstance(event, Response):
+                if isinstance(event.chat_message, MultiModalMessage):
+                    self.add_message(event.chat_message, False)
                 else:
-                    # ストリーム途中のAI出力を仮吹き出しに上書き
-                    ai_stream_text += msg.content
-                    if ai_bubble is not None:
-                        ai_bubble.controls[1].content.value = ai_stream_text
-                        self.page.update()
+                    msg_content = event.chat_message.to_text()
+                    self.add_message(msg_content, False)
+            elif isinstance(event, UserInputRequestedEvent):
+                pass
+            elif isinstance(event, TextMessage):
+                msg_content = event.chat_message.to_text()
+                self.add_message(msg_content, False)
+            else:
+                if isinstance(event, ModelClientStreamingChunkEvent):
+                    if event.source == "assistant" and isinstance(event.content, str) and "satisfied" in event.content:
+                        answer_id = self.answer_count
+                        self.answer_count += 1
+                        self.messages.append(event.content)
+                        self.deliberations[answer_id] = list(current_deliberation)
+                        current_deliberation.clear()
+                        self.chat_column.controls.pop(ai_bubble_idx)
+                        self.add_message_with_deliberation(event.content, answer_id)
+                        ai_bubble = None
+                    elif isinstance(event.to_text(), str):
+                        ai_stream_text += event.to_text()
         self.is_processing = False
         self.loading_indicator.visible = False
         self.page.update()
 
     def add_message_with_deliberation(self, content, answer_id):
         # AI吹き出し（左）
+        max_width = min(self.page.width * 0.75 - 100, 700)  # 画面幅の75%まで（ただし最大700px）
         bubble = ft.Row([
             ft.CircleAvatar(bgcolor=NordicColors.BLUE, content=ft.Icon(ft.Icons.AUTO_AWESOME, color=NordicColors.WHITE, size=18), radius=18),
             ft.Container(
-                content=ft.SelectableText(content, color=NordicColors.WHITE, size=16),
+                content=ft.Markdown(
+                    content, 
+                    selectable=True,
+                    extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                    auto_follow_links=False
+                ),
                 bgcolor=NordicColors.BLUE,
                 padding=12,
                 border_radius=16,
                 margin=8,
                 alignment=ft.alignment.center_left,
+                width=max_width,
+                expand=True,
             ),
         ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START)
         # 熟考過程パネル（サブ吹き出し/ポップオーバー）
@@ -217,16 +255,24 @@ class MyrdaIChatUI:
         self.page.update()
 
     def add_message(self, content, is_user):
+        max_width = min(self.page.width * 0.75 - 100, 700)  # 画面幅の75%まで（ただし最大700px）
         # ユーザー吹き出し（右）
         if is_user:
             row = ft.Row([
                 ft.Container(
-                    content=ft.Markdown(content),
+                    content=ft.Markdown(
+                        content,
+                        selectable=True,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                        auto_follow_links=False
+                    ),
                     bgcolor=NordicColors.GREEN,
                     padding=12,
                     border_radius=16,
                     margin=8,
                     alignment=ft.alignment.center_right,
+                    width=max_width,
+                    expand=True,
                 ),
                 ft.CircleAvatar(bgcolor=NordicColors.PURPLE, content=ft.Icon(ft.Icons.PERSON, color=NordicColors.WHITE, size=18), radius=18),
             ], alignment=ft.MainAxisAlignment.END, vertical_alignment=ft.CrossAxisAlignment.START)
@@ -234,15 +280,40 @@ class MyrdaIChatUI:
             row = ft.Row([
                 ft.CircleAvatar(bgcolor=NordicColors.BLUE, content=ft.Icon(ft.Icons.AUTO_AWESOME, color=NordicColors.WHITE, size=18), radius=18),
                 ft.Container(
-                    content=ft.Markdown(value=content),
+                    content=ft.Markdown(
+                        value=content,
+                        selectable=True,
+                        extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                        auto_follow_links=False
+                    ),
                     bgcolor=NordicColors.BLUE,
                     padding=12,
                     border_radius=16,
                     margin=8,
                     alignment=ft.alignment.center_left,
+                    width=max_width,
+                    expand=True,
                 ),
             ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START)
         self.chat_column.controls.append(row)
+        self.page.update()
+
+    def on_page_resize(self, e):
+        # ウィンドウサイズが変更されたときに既存のメッセージバブルの幅を調整
+        max_width = min(self.page.width * 0.75 - 100, 700)
+        
+        for message_row in self.chat_column.controls:
+            if isinstance(message_row, ft.Row):
+                for control in message_row.controls:
+                    if isinstance(control, ft.Container) and hasattr(control, "content") and isinstance(control.content, ft.Markdown):
+                        control.width = max_width
+            elif isinstance(message_row, ft.Column):
+                for inner_row in message_row.controls:
+                    if isinstance(inner_row, ft.Row):
+                        for control in inner_row.controls:
+                            if isinstance(control, ft.Container) and hasattr(control, "content") and isinstance(control.content, ft.Markdown):
+                                control.width = max_width
+        
         self.page.update()
 
 def main(page: ft.Page):

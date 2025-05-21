@@ -1,0 +1,315 @@
+/* Nordic color palette */
+:root {
+    /* Primary colors */
+    --blue: #5E81AC;
+    --red: #BF616A;
+    --green: #A3BE8C;
+    --yellow: #EBCB8B;
+    
+    /* Neutrals */
+    --white: #ECEFF4;
+    --light-gray: #E5E9F0;
+    --gray: #D8DEE9;
+    --dark-gray: #4C566A;
+    --darker-gray: #3B4252;
+    --darkest-gray: #2E3440;
+    
+    /* Accent colors */
+    --teal: #8FBCBB;
+    --cyan: #88C0D0;
+    --light-blue: #81A1C1;
+    --purple: #B48EAD;
+    
+    /* Font settings */
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+/* Base styles */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--darkest-gray);
+    color: var(--white);
+    line-height: 1.6;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.app-header {
+    padding: 1rem;
+    text-align: center;
+    border-bottom: 1px solid var(--dark-gray);
+}
+
+.app-header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+/* Chat area */
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    padding: 1rem;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+/* Message bubbles */
+.message {
+    display: flex;
+    margin-bottom: 1rem;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.message.user {
+    justify-content: flex-end;
+}
+
+.message-content {
+    max-width: 75%;
+    padding: 0.75rem 1rem;
+    border-radius: 1rem;
+    overflow-wrap: break-word;
+}
+
+.user .message-content {
+    background-color: var(--green);
+    color: var(--darkest-gray);
+    border-top-right-radius: 0.25rem;
+}
+
+.assistant .message-content {
+    background-color: var(--blue);
+    color: var(--white);
+    border-top-left-radius: 0.25rem;
+}
+
+.message-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0.5rem;
+}
+
+.user .message-avatar {
+    background-color: var(--purple);
+    order: 2;
+}
+
+.assistant .message-avatar {
+    background-color: var(--blue);
+    order: 0;
+}
+
+.message-avatar svg {
+    width: 18px;
+    height: 18px;
+    fill: var(--white);
+}
+
+/* Deliberation panel */
+.deliberation-toggle {
+    background-color: var(--teal);
+    color: var(--white);
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.5rem;
+    margin-left: 60px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background-color 0.2s;
+}
+
+.deliberation-toggle:hover {
+    background-color: var(--cyan);
+}
+
+.deliberation-panel {
+    background-color: var(--light-gray);
+    color: var(--darker-gray);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-top: 0.5rem;
+    margin-left: 60px;
+    max-width: calc(75% + 20px);
+    font-size: 0.9rem;
+    display: none;
+}
+
+.deliberation-panel.active {
+    display: block;
+    animation: slideDown 0.3s ease-out;
+}
+
+.deliberation-step {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--gray);
+}
+
+.deliberation-step:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+/* Input area */
+.input-container {
+    margin-top: auto;
+}
+
+.loading-indicator {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    color: var(--light-gray);
+    font-size: 0.9rem;
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid transparent;
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    margin-right: 0.5rem;
+    animation: spin 1s linear infinite;
+}
+
+.input-row {
+    display: flex;
+    align-items: flex-end;
+    background-color: var(--darker-gray);
+    border-radius: 1.5rem;
+    padding: 0.5rem;
+}
+
+#message-input {
+    flex: 1;
+    border: none;
+    background-color: transparent;
+    color: var(--white);
+    font-family: var(--font-family);
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+    max-height: 150px;
+    resize: none;
+    outline: none;
+}
+
+#message-input::placeholder {
+    color: var(--dark-gray);
+}
+
+.send-button {
+    background-color: transparent;
+    border: none;
+    color: var(--blue);
+    cursor: pointer;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.send-button:hover {
+    color: var(--light-blue);
+}
+
+.send-button:disabled {
+    color: var(--dark-gray);
+    cursor: not-allowed;
+}
+
+/* Markdown formatting */
+.message-content p {
+    margin-bottom: 0.75rem;
+}
+
+.message-content p:last-child {
+    margin-bottom: 0;
+}
+
+.message-content pre {
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+    margin: 0.75rem 0;
+}
+
+.message-content code {
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+.message-content ul, .message-content ol {
+    margin-left: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .message-content {
+        max-width: 85%;
+    }
+    
+    .deliberation-panel {
+        max-width: calc(85% + 20px);
+    }
+}
+
+@media (max-width: 480px) {
+    .app-header h1 {
+        font-size: 1.25rem;
+    }
+    
+    .message-content {
+        max-width: 90%;
+    }
+    
+    .deliberation-panel {
+        max-width: calc(90% + 20px);
+    }
+}
