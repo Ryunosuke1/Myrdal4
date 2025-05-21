@@ -88,7 +88,7 @@ class Myrdal:
             return
         llm_client = OpenAIChatCompletionClient(
             model="tngtech/deepseek-r1t-chimera:free", 
-            api_key="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", 
+            api_key="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", 
             base_url="https://openrouter.ai/api/v1", 
             model_info={
                 "function_calling": True,

@@ -3,6 +3,7 @@ import sys
 import os
 import time
 import json
+import re
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -40,6 +41,7 @@ class ChatResponse(BaseModel):
     message: str
     is_user: bool = False
     deliberations: List[str] = []
+    thoughts: List[str] = []  # 思考過程を保存する新しいフィールド
     timestamp: float = None
     id: Optional[str] = None
 
@@ -95,6 +97,7 @@ async def chat(chat_request: ChatRequest):
     # 応答を取得するためのリスト
     response_text = ""
     deliberations = []
+    thoughts = []  # 思考過程を保存するリスト
     
     try:
         # interact_and_get_responsesでレスポンスを取得
@@ -115,6 +118,21 @@ async def chat(chat_request: ChatRequest):
             elif isinstance(event, TextMessage):
                 if hasattr(event, "chat_message"):
                     response_text = event.chat_message.to_text()
+                else:
+                    response_text = event.to_text()
+            elif isinstance(event, ThoughtEvent):
+                # ThoughtEventは思考過程として保存
+                if hasattr(event, "content") and event.content:
+                    thought_content = event.content
+                    # Stepの番号を除去してクリーンな思考テキストを取得
+                    # clean_thought = re.sub(r'^Step \d+:\s*', '', thought_content)
+                    # thoughts.append(clean_thought)
+                    thoughts.append(thought_content)
+                    # deliberations.append(clean_thought)  # 互換性のために両方に保存
+                    deliberations.append(thought_content)
+            elif isinstance(event, ModelClientStreamingChunkEvent):
+                if hasattr(event, "content") and event.content:
+                    deliberations.append(event.content)
             elif isinstance(event, ModelClientStreamingChunkEvent):
                 if event.source == "assistant" and isinstance(event.content, str):
                     if "satisfied" in event.content:
@@ -124,8 +142,15 @@ async def chat(chat_request: ChatRequest):
                         if hasattr(event, "thoughts") and event.thoughts:
                             deliberations.extend(event.thoughts)
                     elif isinstance(event.to_text(), str):
+                        # "Step XXXX:"のプレフィックスを除去
+                        new_text = event.to_text()
+                        if "Step " in new_text and ":" in new_text:
+                            # Step XXXX: の形式を検出して除去
+                            if new_text.strip().startswith("Step ") and ": " in new_text:
+                                # Step XXXXの部分を除去して純粋なテキストを取得
+                                new_text = new_text.split(": ", 1)[1] if ": " in new_text else new_text
                         # ストリーミングテキストを追加
-                        response_text += event.to_text()
+                        response_text += new_text
             # その他のイベントタイプ（フォールバック）
             elif hasattr(event, "to_text") and callable(event.to_text):
                 response_text += event.to_text()
@@ -141,6 +166,11 @@ async def chat(chat_request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
     
+    # "Step XXXX:" のパターンをクリーンアップ
+    import re
+    # 正規表現で "Step 数字: " のパターンを除去
+    response_text = re.sub(r'Step \d+:\s*', '', response_text)
+    
     # タイムスタンプとIDを生成
     timestamp = time.time()
     message_id = f"{int(timestamp * 1000)}_{int(timestamp % 1) * 1000}"
@@ -148,6 +178,7 @@ async def chat(chat_request: ChatRequest):
     return ChatResponse(
         message=response_text,
         deliberations=deliberations,
+        thoughts=thoughts,  # 思考過程も返す
         timestamp=timestamp,
         id=message_id
     )
@@ -187,6 +218,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 応答を取得してストリーミング
                 response_text = ""
                 deliberations = []
+                thoughts = []  # 思考過程を保存するリスト
                 
                 # 実行中のストリーミング更新
                 is_streaming = True
@@ -224,8 +256,28 @@ async def websocket_endpoint(websocket: WebSocket):
                     elif isinstance(event, TextMessage):
                         if hasattr(event, "chat_message"):
                             response_text = event.chat_message.to_text()
+                        else:
+                            response_text = event.to_text()
+                        await websocket.send_json({
+                            "message": response_text,
+                            "is_user": False,
+                            "is_streaming": True,
+                            "timestamp": timestamp,
+                            "id": message_id
+                        })
+                    elif isinstance(event, ThoughtEvent):
+                        # ThoughtEventは思考過程として保存
+                        if hasattr(event, "content") and event.content:
+                            thought_content = event.content
+                            # Stepの番号を除去してクリーンな思考テキストを取得
+                            clean_thought = re.sub(r'^Step \d+:\s*', '', thought_content)
+                            thoughts.append(clean_thought)
+                            deliberations.append(clean_thought)  # 互換性のために両方に保存
+                            
+                            # ストリーミング中は思考過程も送信
                             await websocket.send_json({
                                 "message": response_text,
+                                "thoughts": thoughts,
                                 "is_user": False,
                                 "is_streaming": True,
                                 "timestamp": timestamp,
@@ -248,8 +300,14 @@ async def websocket_endpoint(websocket: WebSocket):
                                     "id": message_id
                                 })
                             elif isinstance(event.to_text(), str):
-                                # ストリーミングテキスト更新
+                                # "Step XXXX:"のプレフィックスを除去
                                 new_text = event.to_text()
+                                if "Step " in new_text and ":" in new_text:
+                                    # Step XXXX: の形式を検出して除去
+                                    if new_text.strip().startswith("Step ") and ": " in new_text:
+                                        # Step XXXXの部分を除去して純粋なテキストを取得
+                                        new_text = new_text.split(": ", 1)[1] if ": " in new_text else new_text
+                                
                                 if new_text:
                                     response_text += new_text
                                     await websocket.send_json({
@@ -298,11 +356,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         })
                 
                 # ストリーミング完了後の最終応答
+                # "Step XXXX:" のパターンをクリーンアップ
+                import re
+                # 正規表現で "Step 数字: " のパターンを除去
+                response_text = re.sub(r'Step \d+:\s*', '', response_text)
+                
                 await websocket.send_json({
                     "message": response_text,
                     "is_user": False,
                     "is_streaming": False,
                     "deliberations": deliberations,
+                    "thoughts": thoughts,
                     "timestamp": timestamp,
                     "id": message_id
                 })
